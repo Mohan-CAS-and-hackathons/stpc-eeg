@@ -8,7 +8,7 @@ This repository contains the complete source code, experimental data, and final 
 ---
 
 ### Quick Links
-**[🚀 View the Live Streamlit Demo](https://ecg-denoiser-hackathon-mohan.streamlit.app/)**
+- **[🚀 View the Live Streamlit Demo](https://ecg-denoiser-hackathon-mohan.streamlit.app/)**
 - **[📄 Read the Full Research Paper (PDF)](STPC_Research_Paper.pdf)**
 - **[💻 Explore the Code](src)**
 
