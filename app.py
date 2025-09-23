@@ -245,7 +245,7 @@ with tab3:
     st.header("Generalization: Proving STPC on a Different Problem")
     st.markdown("To ensure STPC wasn't just for ECGs, I tested it on a completely different signal: noisy EEG data from a seizure patient. The plot below shows that the STPC model (green) perfectly reconstructs both the shape and the underlying dynamics (gradient) of the seizure spike, while the basic model (red) fails. This proves the framework is versatile and robust.")
     try:
-        st.image("eeg_gradient_preservation_plot.png", caption="STPC (green) preserves the sharp seizure spike's shape and gradient, proving its versatility.")
+        st.image("results/eeg_gradient_preservation_plot.png", caption="STPC (green) preserves the sharp seizure spike's shape and gradient, proving its versatility.")
     except FileNotFoundError:
         st.warning("EEG generalization plot ('eeg_gradient_preservation_plot.png') not found. Please run the EEG Colab notebook and save the plot to the project's root directory.")
 

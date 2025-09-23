@@ -2,9 +2,10 @@
 
 # Core AI and Data Handling
 torch
-numpy  # <-- REMOVE ==1.24.4
+numpy  
 scipy
-pandas==2.2.2
+pandas
+# pandas==2.2.2 # For colab
 
 # Data Visualization
 matplotlib
