@@ -1,28 +1,23 @@
-# --- In requirements.txt ---
+# --- requirements.txt ---
 
 # Core AI and Data Handling
 torch
-numpy  
+torchvision
+numpy
 scipy
 pandas
 # pandas==2.2.2 # For colab
 
+# Machine Learning
+scikit-learn
+
 # Data Visualization
 matplotlib
+plotly
+Pillow
 
 # PhysioNet Database Interaction
-wfdb   # <-- REMOVE ==4.1.2
+wfdb
 
 # Web Application
 streamlit
-
-scikit-learn
-
-plotly
-
-scipy
-
-Pillow
-
-torchvision
-
