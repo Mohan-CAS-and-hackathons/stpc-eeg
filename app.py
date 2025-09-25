@@ -229,9 +229,9 @@ with tab3:
         # We will show the worst case (Noisy) vs. the best case (STPC Denoised)
         col1, col2 = st.columns(2)
         with col1:
-            st.image(Image.open('results/stpc_full_confusion_matrix_noisy.png'), caption="Classifier Performance on RAW NOISY Data")
+            st.image(Image.open('results/final_cm_noisy.png'), caption="Classifier Performance on RAW NOISY Data")
         with col2:
-            st.image(Image.open('results/stpc_full_confusion_matrix_denoised.png'), caption="Classifier Performance on STPC DENOISED Data (Vastly Improved)")
+            st.image(Image.open('results/final_cm_stpc_full_denoised.png'), caption="Classifier Performance on STPC DENOISED Data (Vastly Improved)")
     except FileNotFoundError:
         st.warning("Validation images not found. Please run the full Colab notebook to generate all result files.")
 
