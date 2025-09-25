@@ -138,20 +138,23 @@ def main(args):
 
         results[name] = {'preds': predictions, 'truth': ground_truth}
 
-    class_names = list(BEAT_CLASSES.keys())
+    # Define the FINAL 5 class names for plotting
+    final_class_names = ['N', 'S', 'V', 'F', 'Q']
+    final_class_labels = range(len(final_class_names))
+
     for name, data in results.items():
         print(f"\n--- PERFORMANCE ON {name.upper()} SIGNAL ---")
         report = classification_report(
             data['truth'],
             data['preds'],
-            target_names=class_names,
-            labels=range(len(class_names)),
+            target_names=final_class_names, # Use corrected names
+            labels=final_class_labels,       # Use corrected labels
             zero_division=0
         )
         print(report)
 
-        cm = confusion_matrix(data['truth'], data['preds'], labels=range(len(class_names)))
-        disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=class_names)
+        cm = confusion_matrix(data['truth'], data['preds'], labels=final_class_labels) # Use corrected labels
+        disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=final_class_names) # Use corrected names
         disp.plot(cmap=plt.cm.Blues)
         disp.ax_.set_title(f'Confusion Matrix - {name} Signal')
 
