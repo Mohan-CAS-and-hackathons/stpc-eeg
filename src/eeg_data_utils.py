@@ -19,39 +19,50 @@ CHB_MIT_CHANNELS_ROBUST = [
 ]
 TARGET_FS = 256  # Target sampling frequency for all EEG data
 
-def load_eeg_from_edf(file_path, target_fs=TARGET_FS, desired_channels=CHB_MIT_CHANNELS_ROBUST):
+def load_eeg_from_edf(file_path, target_fs=TARGET_FS, desired_channels=None):
     """
-    Loads an EEG signal from an .edf file, preprocesses it, and returns a NumPy array.
-    This version is robust to missing channels.
+    Loads an EEG signal, preprocesses it, renames channels to monopolar,
+    and returns both the data and the final channel names.
     """
     try:
         raw = mne.io.read_raw_edf(file_path, preload=True, verbose=False)
 
-        # --- KEY MODIFICATION: Robust channel selection ---
-        # Instead of failing, we find which of our desired channels are actually available.
-        available_channels = [ch.upper() for ch in raw.ch_names]
-        channels_to_pick = [ch for ch in desired_channels if ch.upper() in available_channels]
+        if desired_channels:
+            available_channels = [ch.upper() for ch in raw.ch_names]
+            channels_to_pick = [ch for ch in desired_channels if ch.upper() in available_channels]
+            if len(channels_to_pick) < len(desired_channels):
+                 # This handles the case where a file is missing a common channel
+                 return None, None
+            raw.pick(channels_to_pick)
 
-        # If a file has too few of our desired channels, we can skip it.
-        if len(channels_to_pick) < 18: # A reasonable threshold
-            print(f"Warning: Skipping file {os.path.basename(file_path)} - found only {len(channels_to_pick)} of desired channels.")
-            return None
-            
-        # Use the modern .pick() method with the list of channels that are guaranteed to exist.
-        raw.pick(channels_to_pick)
-        # ---------------------------------------------------
+        # --- KEY FIX: Rename bipolar to monopolar BEFORE further processing ---
+        # We create a unique list of monopolar names.
+        # e.g., {'FP1-F7': 'FP1', 'F7-T7': 'F7', ...}
+        # This handles duplicates like 'FP1-F7' and 'FP1-F3' by taking the first one.
+        ch_name_mapping = {}
+        new_names = set()
+        for ch_name in raw.ch_names:
+            mono_name = ch_name.split('-')[0].upper()
+            if mono_name not in new_names:
+                ch_name_mapping[ch_name] = mono_name
+                new_names.add(mono_name)
+        
+        # Keep only the channels that we could successfully map to a unique monopolar name
+        raw.pick(list(ch_name_mapping.keys()))
+        raw.rename_channels(ch_name_mapping)
+        # --- END FIX ---
 
         raw.set_eeg_reference('average', projection=False)
         raw.filter(l_freq=0.5, h_freq=70.0)
         raw.notch_filter(freqs=60.0)
         raw.resample(sfreq=target_fs)
+        
         data = raw.get_data()
-        return data.astype(np.float32)
+        return data.astype(np.float32), raw.ch_names # Return data and the new monopolar names
 
     except Exception as e:
         print(f"Error processing file {file_path}: {e}")
-        return None
-
+        return None, None
 # ... (The rest of the file remains exactly the same)
 
 def create_eeg_segments(data, window_samples, overlap_samples=0):
