@@ -13,30 +13,35 @@ from model import UNet1D
 from eeg_data_utils import load_eeg_from_edf, create_eeg_segments, EEGDataset, TARGET_FS, get_adjacency_list
 
 def find_common_monopolar_channels(directory):
-    """Finds the intersection of standard monopolar channels across all .edf files."""
-    common_channels = None
+    """Finds the intersection of standard monopolar channels, case-insensitively."""
+    common_channels_set = None
     montage = mne.channels.make_standard_montage('standard_1020')
-    standard_channels_upper = {ch.upper() for ch in montage.ch_names}
+    # Get the official names from the montage and convert to a case-insensitive set
+    standard_channels_map = {ch.upper(): ch for ch in montage.ch_names}
+    standard_channels_upper = set(standard_channels_map.keys())
     
     files_to_check = [f for f in os.listdir(directory) if f.endswith('.edf')]
     for f in tqdm(files_to_check, desc="Scanning for common channels"):
         file_path = os.path.join(directory, f)
         try:
             raw = mne.io.read_raw_edf(file_path, preload=False, verbose=False)
-            current_monopolar = set()
+            current_monopolar_upper = set()
             for ch_name in raw.ch_names:
-                mono_name = ch_name.split('-')[0].upper()
-                if mono_name in standard_channels_upper:
-                    current_monopolar.add(mono_name)
+                mono_name_upper = ch_name.split('-')[0].upper()
+                if mono_name_upper in standard_channels_upper:
+                    current_monopolar_upper.add(mono_name_upper)
             
-            if common_channels is None:
-                common_channels = current_monopolar
+            if common_channels_set is None:
+                common_channels_set = current_monopolar_upper
             else:
-                common_channels.intersection_update(current_monopolar)
+                common_channels_set.intersection_update(current_monopolar_upper)
         except Exception:
-            pass # Ignore files that can't be read
+            pass
     
-    return sorted(list(common_channels))
+    # Convert the final uppercase set back to the official mixed-case names
+    final_common_channels = [standard_channels_map[ch_upper] for ch_upper in common_channels_set]
+    
+    return sorted(final_common_channels)
 
 # ... (Loss function classes remain the same)
 class TemporalGradientLoss(nn.Module):
