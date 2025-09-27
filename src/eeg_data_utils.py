@@ -7,35 +7,31 @@ from torch.utils.data import Dataset
 
 TARGET_FS = 256
 
-def load_eeg_from_edf(file_path, desired_channels, target_fs=TARGET_FS):
+def load_eeg_from_edf(file_path, target_fs=TARGET_FS):
+    """
+    Loads an EDF, robustly extracts a set of standard monopolar channels,
+    and returns the data array and the list of final channel names.
+    """
     try:
         raw = mne.io.read_raw_edf(file_path, preload=True, verbose=False)
         
-        # --- DEFINITIVE FIX: Case-insensitive mapping ---
-        # Get the standard montage names and convert them to a case-insensitive set
         montage = mne.channels.make_standard_montage('standard_1020')
-        standard_channels_set = {ch.upper() for ch in montage.ch_names}
-        
-        # Map original bipolar names to standard monopolar names that exist in the montage
+        standard_channels_map = {ch.upper(): ch for ch in montage.ch_names}
+        standard_channels_upper = set(standard_channels_map.keys())
+
         ch_name_mapping = {}
-        # Use a temporary list to ensure we don't have duplicate monopolar names
-        final_mono_names_temp = []
+        final_mono_names_upper = []
         
         for ch_name in raw.ch_names:
-            mono_name = ch_name.split('-')[0].upper()
-            if mono_name in standard_channels_set and mono_name not in final_mono_names_temp:
-                # We will rename the channel in the raw object to this standard monopolar name
-                ch_name_mapping[ch_name] = mono_name
-                final_mono_names_temp.append(mono_name)
+            mono_name_upper = ch_name.split('-')[0].upper()
+            if mono_name_upper in standard_channels_upper and mono_name_upper not in final_mono_names_upper:
+                # Use the official mixed-case name for the mapping
+                ch_name_mapping[ch_name] = standard_channels_map[mono_name_upper]
+                final_mono_names_upper.append(mono_name_upper)
 
-        # Pick only the channels we could map and then rename them
         raw.pick(list(ch_name_mapping.keys()))
         raw.rename_channels(ch_name_mapping)
-        
-        # Now, select ONLY the channels that are in our "common channels" list for this session
-        raw.pick(desired_channels)
-        # --- END FIX ---
-        
+
         raw.set_eeg_reference('average', projection=False)
         raw.filter(l_freq=0.5, h_freq=70.0)
         raw.notch_filter(freqs=60.0)
@@ -43,11 +39,9 @@ def load_eeg_from_edf(file_path, desired_channels, target_fs=TARGET_FS):
         
         raw.reorder_channels(sorted(raw.ch_names))
         
-        data = raw.get_data()
-        return data.astype(np.float32), raw.ch_names
+        return raw.get_data().astype(np.float32), raw.ch_names
 
-    except Exception as e:
-        print(f"Error processing file {file_path}: {e}")
+    except Exception:
         return None, None
 
 def get_adjacency_list(channel_names):

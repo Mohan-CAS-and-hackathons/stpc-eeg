@@ -97,33 +97,40 @@ def main(args):
     
     subject_dir = os.path.join(args.data_dir, 'chb01')
     
-    # 1. Determine the consistent set of channels across ALL files first
-    common_channels = find_common_monopolar_channels(subject_dir)
-    config.NUM_CHANNELS = len(common_channels)
-    print(f"Found {config.NUM_CHANNELS} common monopolar channels. Using this consistent set: {common_channels}")
-    
-    # 2. Load all data, ensuring each file is processed to match this common set
-    all_segments = []
+    # 1. Load data and channel names from ALL files first
+    all_files_data = []
+    all_files_ch_names = []
     for f in tqdm(os.listdir(subject_dir), desc="Loading and processing files"):
         if f.endswith('.edf'):
             file_path = os.path.join(subject_dir, f)
-            # THIS IS THE CORRECTED LINE:
-            data, ch_names = load_eeg_from_edf(file_path, desired_channels=common_channels)
+            data, ch_names = load_eeg_from_edf(file_path)
+            if data is not None:
+                all_files_data.append(data)
+                all_files_ch_names.append(set(ch_names))
+
+    # 2. Find the intersection of channel names across all successfully loaded files
+    if not all_files_ch_names:
+        raise RuntimeError("No data could be loaded. Check file paths and contents.")
+    common_channels = sorted(list(set.intersection(*all_files_ch_names)))
+    config.NUM_CHANNELS = len(common_channels)
+    print(f"Found {config.NUM_CHANNELS} common monopolar channels: {common_channels}")
+
+    # 3. Create segments, ensuring all data conforms to the common channel set
+    all_segments = []
+    for data, ch_names in zip(all_files_data, all_files_ch_names):
+        if set(ch_names) == set(common_channels):
+            ch_map = {name: i for i, name in enumerate(ch_names)}
+            ordered_indices = [ch_map[name] for name in common_channels]
+            ordered_data = data[ordered_indices, :]
+            segments = create_eeg_segments(ordered_data, config.WINDOW_SAMPLES)
+            all_segments.extend(segments)
             
-            if data is not None and ch_names is not None and set(ch_names) == set(common_channels):
-                # Ensure channel order is consistent before segmenting
-                ch_map = {name: i for i, name in enumerate(ch_names)}
-                ordered_indices = [ch_map[name] for name in common_channels]
-                ordered_data = data[ordered_indices, :]
-                segments = create_eeg_segments(ordered_data, config.WINDOW_SAMPLES)
-                all_segments.extend(segments)
-    
     print(f"Total valid segments created: {len(all_segments)}")
     train_dataset = EEGDataset(clean_segments=all_segments, samples_per_epoch=config.SAMPLES_PER_EPOCH)
     train_loader = DataLoader(train_dataset, batch_size=config.BATCH_SIZE, num_workers=config.NUM_WORKERS,
                               pin_memory=(config.DEVICE=='cuda'), shuffle=True)
     
-    # 3. Build model and loss functions using the consistent channel set
+    # 4. Build model and loss functions
     adjacency_list = get_adjacency_list(common_channels)
     model = UNet1D(in_channels=config.NUM_CHANNELS, out_channels=config.NUM_CHANNELS).to(config.DEVICE)
     optimizer = optim.AdamW(model.parameters(), lr=config.LEARNING_RATE)
@@ -137,7 +144,7 @@ def main(args):
     os.makedirs(os.path.dirname(args.model_save_path), exist_ok=True)
     for epoch in range(config.NUM_EPOCHS):
         avg_loss = train_one_epoch(train_loader, model, optimizer, loss_functions, scaler, config, args)
-        print(f"Epoch {epoch+1}/{config.NUM_EPOCHS}, Average Loss: {avg_loss:.6f}")
+        print(f"Epoch {epoch+1}/{config.NUM_epochs}, Average Loss: {avg_loss:.6f}")
         torch.save(model.state_dict(), args.model_save_path)
 
     print(f"\n✅ Training complete. Model saved to {args.model_save_path}")
