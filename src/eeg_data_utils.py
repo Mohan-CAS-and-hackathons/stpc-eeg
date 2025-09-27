@@ -122,3 +122,42 @@ if __name__ == '__main__':
         print(f"   Success! Dataset returned noisy/clean pair with shape: {noisy.shape}")
         
         print("\n✅ Phase 0 Data Utilities are now robust and working correctly!")
+
+    
+# Add this code block to src/eeg_data_utils.py
+
+# A dictionary defining the neighbors for common 10-20 EEG channels
+EEG_1020_ADJACENCY = {
+    'FP1-F7': ['F7-T7', 'FP1-F3'],
+    'F7-T7': ['FP1-F7', 'T7-P7', 'F3-C3'],
+    'T7-P7': ['F7-T7', 'P7-O1', 'C3-P3'],
+    'P7-O1': ['T7-P7', 'P3-O1'],
+    'FP1-F3': ['FP1-F7', 'F3-C3', 'FZ-CZ'],
+    'F3-C3': ['FP1-F3', 'C3-P3', 'F7-T7', 'FZ-CZ'],
+    'C3-P3': ['F3-C3', 'P3-O1', 'T7-P7', 'CZ-PZ'],
+    'P3-O1': ['C3-P3', 'P7-O1', 'CZ-PZ'],
+    'FP2-F4': ['FP2-F8', 'F4-C4', 'FZ-CZ'],
+    'F4-C4': ['FP2-F4', 'C4-P4', 'F8-T8', 'FZ-CZ'],
+    'C4-P4': ['F4-C4', 'P4-O2', 'T8-P8', 'CZ-PZ'],
+    'P4-O2': ['C4-P4', 'P8-O2', 'CZ-PZ'],
+    'FP2-F8': ['FP2-F4', 'F8-T8'],
+    'F8-T8': ['FP2-F8', 'T8-P8', 'F4-C4'],
+    'T8-P8': ['F8-T8', 'P8-O2', 'C4-P4'],
+    'P8-O2': ['T8-P8', 'P4-O2'],
+    'FZ-CZ': ['FP1-F3', 'F3-C3', 'FP2-F4', 'F4-C4', 'CZ-PZ'],
+    'CZ-PZ': ['FZ-CZ', 'C3-P3', 'P3-O1', 'C4-P4', 'P4-O2'],
+    # Add any other channels from your robust list if needed
+}
+
+def get_adjacency_list(channel_names):
+    """
+    Creates a list of neighbor indices based on a list of channel names.
+    This is what the loss function will use.
+    """
+    adj_list = []
+    channel_indices = {name.upper(): i for i, name in enumerate(channel_names)}
+    for i, ch_name in enumerate(channel_names):
+        neighbors = EEG_1020_ADJACENCY.get(ch_name.upper(), [])
+        neighbor_indices = [channel_indices[n.upper()] for n in neighbors if n.upper() in channel_indices]
+        adj_list.append(neighbor_indices)
+    return adj_list
