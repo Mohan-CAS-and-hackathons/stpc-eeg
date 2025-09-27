@@ -107,8 +107,10 @@ def main(args):
     for f in tqdm(os.listdir(subject_dir), desc="Loading and processing files"):
         if f.endswith('.edf'):
             file_path = os.path.join(subject_dir, f)
-            data, ch_names = load_eeg_from_edf(file_path)
-            if data is not None and set(ch_names) == set(common_channels):
+            # THIS IS THE CORRECTED LINE:
+            data, ch_names = load_eeg_from_edf(file_path, desired_channels=common_channels)
+            
+            if data is not None and ch_names is not None and set(ch_names) == set(common_channels):
                 # Ensure channel order is consistent before segmenting
                 ch_map = {name: i for i, name in enumerate(ch_names)}
                 ordered_indices = [ch_map[name] for name in common_channels]
@@ -132,7 +134,6 @@ def main(args):
         loss_functions['Temporal'] = TemporalGradientLoss()
         loss_functions['Spatial'] = LaplacianLoss(adjacency_list)
 
-    # ... (Training loop remains the same)
     os.makedirs(os.path.dirname(args.model_save_path), exist_ok=True)
     for epoch in range(config.NUM_EPOCHS):
         avg_loss = train_one_epoch(train_loader, model, optimizer, loss_functions, scaler, config, args)
@@ -140,7 +141,7 @@ def main(args):
         torch.save(model.state_dict(), args.model_save_path)
 
     print(f"\n✅ Training complete. Model saved to {args.model_save_path}")
-
+    
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     # ... (Parser arguments remain the same)
