@@ -13,10 +13,8 @@ from model import UNet1D
 from eeg_data_utils import load_eeg_from_edf, create_eeg_segments, EEGDataset, TARGET_FS, get_adjacency_list
 
 def find_common_monopolar_channels(directory):
-    """Finds the intersection of standard monopolar channels, case-insensitively."""
     common_channels_set = None
     montage = mne.channels.make_standard_montage('standard_1020')
-    # Get the official names from the montage and convert to a case-insensitive set
     standard_channels_map = {ch.upper(): ch for ch in montage.ch_names}
     standard_channels_upper = set(standard_channels_map.keys())
     
@@ -35,18 +33,15 @@ def find_common_monopolar_channels(directory):
                 common_channels_set = current_monopolar_upper
             else:
                 common_channels_set.intersection_update(current_monopolar_upper)
-        except Exception:
-            pass
+        except Exception: pass
     
-    # Convert the final uppercase set back to the official mixed-case names
     final_common_channels = [standard_channels_map[ch_upper] for ch_upper in common_channels_set]
-    
     return sorted(final_common_channels)
 
-# ... (Loss function classes remain the same)
 class TemporalGradientLoss(nn.Module):
     def __init__(self): super().__init__(); self.loss = nn.L1Loss()
     def forward(self, pred, target): return self.loss(torch.diff(pred, dim=-1), torch.diff(target, dim=-1))
+
 class LaplacianLoss(nn.Module):
     def __init__(self, adj_list): super().__init__(); self.adj_list = adj_list; self.loss = nn.L1Loss()
     def _calculate_laplacian(self, x):
@@ -57,24 +52,22 @@ class LaplacianLoss(nn.Module):
     def forward(self, pred, target): return self.loss(self._calculate_laplacian(pred), self._calculate_laplacian(target))
 
 class Config:
-    # ... (Config class remains the same)
     DEFAULT_DATA_DIR = "data/chb-mit-scalp-eeg-database-1.0.0/"
     DEFAULT_MODEL_SAVE_PATH = "models/eeg_denoiser_base.pth"
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
     LEARNING_RATE = 1e-4
     BATCH_SIZE = 16
-    NUM_EPOCHS = 30
+    NUM_EPOCHS = 10
     NUM_WORKERS = 2
     WINDOW_SECONDS = 2
     WINDOW_SAMPLES = int(WINDOW_SECONDS * TARGET_FS)
     SAMPLES_PER_EPOCH = 5000
 
 def train_one_epoch(loader, model, optimizer, loss_fns, scaler, config, args):
-    # ... (train_one_epoch remains the same)
     loop = tqdm(loader, leave=True)
     total_loss = 0.0
     for noisy, clean in loop:
-        noisy = noisy.to(config.DEVICE); clean = clean.to(config.DEVICE)
+        noisy, clean = noisy.to(config.DEVICE), clean.to(config.DEVICE)
         with torch.autocast(device_type=config.DEVICE, dtype=torch.float16, enabled=config.DEVICE=='cuda'):
             denoised = model(noisy)
             loss_amp = loss_fns['L1'](denoised, clean)
@@ -97,40 +90,43 @@ def main(args):
     
     subject_dir = os.path.join(args.data_dir, 'chb01')
     
-    # 1. Load data and channel names from ALL files first
-    all_files_data = []
-    all_files_ch_names = []
-    for f in tqdm(os.listdir(subject_dir), desc="Loading and processing files"):
-        if f.endswith('.edf'):
-            file_path = os.path.join(subject_dir, f)
-            data, ch_names = load_eeg_from_edf(file_path)
-            if data is not None:
-                all_files_data.append(data)
-                all_files_ch_names.append(set(ch_names))
-
-    # 2. Find the intersection of channel names across all successfully loaded files
-    if not all_files_ch_names:
-        raise RuntimeError("No data could be loaded. Check file paths and contents.")
-    common_channels = sorted(list(set.intersection(*all_files_ch_names)))
+    common_channels = find_common_monopolar_channels(subject_dir)
     config.NUM_CHANNELS = len(common_channels)
     print(f"Found {config.NUM_CHANNELS} common monopolar channels: {common_channels}")
+    
+    training_segments = []
+    
+    for f in tqdm(os.listdir(subject_dir), desc="Loading and processing files"):
+        if f.endswith('.edf'):
+            if 'chb01_03.edf' in f:
+                print(f"\nExcluding {f} from training data (reserved for validation).")
+                continue
 
-    # 3. Create segments, ensuring all data conforms to the common channel set
-    all_segments = []
-    for data, ch_names in zip(all_files_data, all_files_ch_names):
-        if set(ch_names) == set(common_channels):
-            ch_map = {name: i for i, name in enumerate(ch_names)}
-            ordered_indices = [ch_map[name] for name in common_channels]
-            ordered_data = data[ordered_indices, :]
-            segments = create_eeg_segments(ordered_data, config.WINDOW_SAMPLES)
-            all_segments.extend(segments)
+            file_path = os.path.join(subject_dir, f)
+            data, ch_names = load_eeg_from_edf(file_path)
             
-    print(f"Total valid segments created: {len(all_segments)}")
-    train_dataset = EEGDataset(clean_segments=all_segments, samples_per_epoch=config.SAMPLES_PER_EPOCH)
+            if data is not None and ch_names is not None and set(ch_names) == set(common_channels):
+                ch_map = {name: i for i, name in enumerate(ch_names)}
+                ordered_indices = [ch_map[name] for name in common_channels]
+                ordered_data = data[ordered_indices, :]
+                segments = create_eeg_segments(ordered_data, config.WINDOW_SAMPLES)
+                training_segments.extend(segments)
+            
+    if not training_segments:
+        raise RuntimeError("Total valid segments created is 0.")
+        
+    print(f"Total valid segments for training: {len(training_segments)}")
+    train_dataset = EEGDataset(clean_segments=training_segments, samples_per_epoch=config.SAMPLES_PER_EPOCH)
+    
+    stats_dir = os.path.dirname(args.model_save_path)
+    os.makedirs(stats_dir, exist_ok=True)
+    stats_path = os.path.join(stats_dir, "norm_stats.npz")
+    np.savez(stats_path, mean=train_dataset.mean, std=train_dataset.std, channels=common_channels)
+    print(f"Normalization stats saved to {stats_path}")
+
     train_loader = DataLoader(train_dataset, batch_size=config.BATCH_SIZE, num_workers=config.NUM_WORKERS,
                               pin_memory=(config.DEVICE=='cuda'), shuffle=True)
     
-    # 4. Build model and loss functions
     adjacency_list = get_adjacency_list(common_channels)
     model = UNet1D(in_channels=config.NUM_CHANNELS, out_channels=config.NUM_CHANNELS).to(config.DEVICE)
     optimizer = optim.AdamW(model.parameters(), lr=config.LEARNING_RATE)
@@ -141,17 +137,15 @@ def main(args):
         loss_functions['Temporal'] = TemporalGradientLoss()
         loss_functions['Spatial'] = LaplacianLoss(adjacency_list)
 
-    os.makedirs(os.path.dirname(args.model_save_path), exist_ok=True)
     for epoch in range(config.NUM_EPOCHS):
         avg_loss = train_one_epoch(train_loader, model, optimizer, loss_functions, scaler, config, args)
-        print(f"Epoch {epoch+1}/{config.NUM_epochs}, Average Loss: {avg_loss:.6f}")
+        print(f"Epoch {epoch+1}/{config.NUM_EPOCHS}, Average Loss: {avg_loss:.6f}")
         torch.save(model.state_dict(), args.model_save_path)
 
     print(f"\n✅ Training complete. Model saved to {args.model_save_path}")
-    
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    # ... (Parser arguments remain the same)
     parser.add_argument('--experiment', type=str, default='baseline',
                         choices=['baseline', 'spatial', 'frequency', 'self_supervised'])
     parser.add_argument('--data_dir', type=str, default=Config.DEFAULT_DATA_DIR)

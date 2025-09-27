@@ -26,3 +26,5 @@ mne
 pyEDFlib
 imageio
 umap-learn
+
+scikit-image
