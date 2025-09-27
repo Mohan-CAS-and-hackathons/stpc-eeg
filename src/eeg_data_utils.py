@@ -45,21 +45,50 @@ def load_eeg_from_edf(file_path, target_fs=TARGET_FS):
         return None, None
 
 def get_adjacency_list(channel_names):
+    """
+    Creates a list of neighbor indices based on 3D sensor locations.
+    This is the robust, version-independent method.
+    """
     montage = mne.channels.make_standard_montage('standard_1020')
-    info = mne.create_info(ch_names=channel_names, sfreq=TARGET_FS, ch_types='eeg')
     
-    # --- DEFINITIVE FIX: Use 'ignore' to handle minor discrepancies ---
-    info.set_montage(montage, on_missing='ignore')
-    # MNE can find neighbors automatically from the montage
-    adj, _ = mne.channels.find_ch_connectivity(info, ch_type='eeg')
-    adj_matrix = adj.toarray()
+    # Get the 3D positions of the channels we are using
+    positions = []
+    present_channels = []
+    for ch in channel_names:
+        if ch in montage.ch_names:
+            ch_index = montage.ch_names.index(ch)
+            positions.append(montage.get_positions()['ch_pos'][ch])
+            present_channels.append(ch)
+
+    positions = np.array(positions)
+    
+    # Calculate pairwise distances between all channels
+    from scipy.spatial.distance import pdist, squareform
+    dist_matrix = squareform(pdist(positions))
+    
+    # Define neighbors as channels within a certain radius (e.g., 0.05 meters)
+    # This is a common way to define adjacency in MNE
+    adjacency_matrix = dist_matrix < 0.05
+    # A channel is not its own neighbor
+    np.fill_diagonal(adjacency_matrix, False)
     
     adj_list = []
-    for i in range(len(channel_names)):
-        neighbor_indices = np.where(adj_matrix[i] == 1)[0].tolist()
+    for i in range(len(present_channels)):
+        neighbor_indices = np.where(adjacency_matrix[i])[0].tolist()
         adj_list.append(neighbor_indices)
         
-    return adj_list
+    # The adjacency list must match the order of the original channel_names.
+    # We need to map the indices from `present_channels` back to `channel_names`.
+    final_adj_list = [[] for _ in channel_names]
+    name_to_idx_map = {name: i for i, name in enumerate(channel_names)}
+    
+    for i, ch_name in enumerate(present_channels):
+        original_idx = name_to_idx_map[ch_name]
+        neighbor_names = [present_channels[j] for j in adj_list[i]]
+        final_neighbor_indices = [name_to_idx_map[n] for n in neighbor_names]
+        final_adj_list[original_idx] = final_neighbor_indices
+
+    return final_adj_list
 
 # ... The rest of the file (create_eeg_segments, EEGDataset) remains the same ...
 def create_eeg_segments(data, window_samples, overlap_samples=0):
