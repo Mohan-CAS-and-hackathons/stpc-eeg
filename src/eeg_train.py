@@ -34,10 +34,8 @@ def find_common_channels(directory):
     return list(common_channels)
 
 class Config:
-    # These are now defaults, can be overridden by command-line args
     DEFAULT_DATA_DIR = "data/chb-mit-scalp-eeg-database-1.0.0/"
     DEFAULT_MODEL_SAVE_PATH = "models/eeg_denoiser_base.pth"
-    
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
     LEARNING_RATE = 1e-4
     BATCH_SIZE = 16
@@ -51,11 +49,16 @@ def train_one_epoch(loader, model, optimizer, loss_fn, scaler, config):
     loop = tqdm(loader, leave=True)
     total_loss = 0.0
     for noisy, clean in loop:
-        noisy, clean = noisy.to(config.DEVICE)
+        # --- KEY MODIFICATION: Correctly move tensors to the device ---
+        # Each tensor must be moved individually.
+        noisy = noisy.to(config.DEVICE)
         clean = clean.to(config.DEVICE)
+        # -----------------------------------------------------------------
+        
         with torch.autocast(device_type=config.DEVICE, dtype=torch.float16, enabled=config.DEVICE=='cuda'):
             denoised = model(noisy)
             loss = loss_fn(denoised, clean)
+            
         if config.DEVICE == 'cuda':
             optimizer.zero_grad()
             scaler.scale(loss).backward()
@@ -65,6 +68,7 @@ def train_one_epoch(loader, model, optimizer, loss_fn, scaler, config):
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            
         total_loss += loss.item()
         loop.set_postfix(loss=loss.item())
     return total_loss / len(loader)
@@ -114,7 +118,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train a 1D U-Net for Multi-Channel EEG Denoising.')
     parser.add_argument('--experiment', type=str, default='baseline',
                         choices=['baseline', 'spatial', 'frequency', 'self_supervised'])
-    # --- KEY MODIFICATION: Added command-line arguments for paths ---
     parser.add_argument('--data_dir', type=str, default=Config.DEFAULT_DATA_DIR,
                         help='Path to the root EEG data directory.')
     parser.add_argument('--model_save_path', type=str, default=Config.DEFAULT_MODEL_SAVE_PATH,
