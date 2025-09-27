@@ -4,67 +4,76 @@ import numpy as np
 import os
 import torch
 from torch.utils.data import Dataset
-from tqdm import tqdm
 
-# --- Configuration ---
-# MODIFICATION: This is a robust list of 21 channels commonly found across the CHB-MIT dataset.
-# We removed the channels that were causing errors ('PZ-OZ') and others that are sometimes absent.
-# This list is more likely to be present in all files.
-CHB_MIT_CHANNELS_ROBUST = [
-    'FP1-F7', 'F7-T7', 'T7-P7', 'P7-O1', 'FP1-F3', 'F3-C3', 'C3-P3', 'P3-O1',
-    'FP2-F4', 'F4-C4', 'C4-P4', 'P4-O2', 'FP2-F8', 'F8-T8', 'T8-P8', 'P8-O2',
-    'FZ-CZ', 'CZ-PZ',
-    # Extra common channels
-    'P7-T7', 'T7-FT9', 'FT9-FT10'
-]
-TARGET_FS = 256  # Target sampling frequency for all EEG data
+# This file now contains the definitive, robust data loading logic.
 
-def load_eeg_from_edf(file_path, target_fs=TARGET_FS, desired_channels=None):
+TARGET_FS = 256
+
+def load_eeg_from_edf(file_path, target_fs=TARGET_FS):
     """
-    Loads an EEG signal, preprocesses it, renames channels to monopolar,
-    and returns both the data and the final channel names.
+    Loads an EDF, robustly extracts a set of standard monopolar channels,
+    and returns the data array and the list of final channel names.
+    This is the definitive data loading function.
     """
     try:
         raw = mne.io.read_raw_edf(file_path, preload=True, verbose=False)
-
-        if desired_channels:
-            available_channels = [ch.upper() for ch in raw.ch_names]
-            channels_to_pick = [ch for ch in desired_channels if ch.upper() in available_channels]
-            if len(channels_to_pick) < len(desired_channels):
-                 # This handles the case where a file is missing a common channel
-                 return None, None
-            raw.pick(channels_to_pick)
-
-        # --- KEY FIX: Rename bipolar to monopolar BEFORE further processing ---
-        # We create a unique list of monopolar names.
-        # e.g., {'FP1-F7': 'FP1', 'F7-T7': 'F7', ...}
-        # This handles duplicates like 'FP1-F7' and 'FP1-F3' by taking the first one.
-        ch_name_mapping = {}
-        new_names = set()
-        for ch_name in raw.ch_names:
-            mono_name = ch_name.split('-')[0].upper()
-            if mono_name not in new_names:
-                ch_name_mapping[ch_name] = mono_name
-                new_names.add(mono_name)
         
-        # Keep only the channels that we could successfully map to a unique monopolar name
+        # 1. Get a standard 10-20 montage from MNE
+        montage = mne.channels.make_standard_montage('standard_1020')
+        standard_channels_upper = {ch.upper() for ch in montage.ch_names}
+
+        # 2. Create a mapping from the file's original channel names to standard monopolar names
+        ch_name_mapping = {}
+        final_monopolar_names = []
+        
+        for ch_name in raw.ch_names:
+            # Extract the first part of the bipolar name (e.g., 'FP1' from 'FP1-F7')
+            mono_name = ch_name.split('-')[0].upper()
+            
+            # Check if this monopolar name is in the standard montage AND we haven't added it yet
+            if mono_name in standard_channels_upper and mono_name not in final_monopolar_names:
+                ch_name_mapping[ch_name] = mono_name
+                final_monopolar_names.append(mono_name)
+        
+        # 3. Pick only the channels we could successfully map and rename them
         raw.pick(list(ch_name_mapping.keys()))
         raw.rename_channels(ch_name_mapping)
-        # --- END FIX ---
 
+        # 4. Standard preprocessing
         raw.set_eeg_reference('average', projection=False)
         raw.filter(l_freq=0.5, h_freq=70.0)
         raw.notch_filter(freqs=60.0)
         raw.resample(sfreq=target_fs)
         
+        # 5. Reorder channels alphabetically to ensure consistency across all files
+        raw.reorder_channels(sorted(raw.ch_names))
+        
         data = raw.get_data()
-        return data.astype(np.float32), raw.ch_names # Return data and the new monopolar names
+        return data.astype(np.float32), raw.ch_names
 
     except Exception as e:
         print(f"Error processing file {file_path}: {e}")
         return None, None
-# ... (The rest of the file remains exactly the same)
 
+def get_adjacency_list(channel_names):
+    # This function is now much simpler as it operates on clean, monopolar names
+    montage = mne.channels.make_standard_montage('standard_1020')
+    info = mne.create_info(ch_names=channel_names, sfreq=TARGET_FS, ch_types='eeg')
+    info.set_montage(montage, on_missing='raise') # Should not have missing channels now
+    
+    # MNE can find neighbors automatically from the montage
+    adj, names = mne.channels.find_ch_connectivity(info, ch_type='eeg')
+    adj_matrix = adj.toarray()
+    
+    adj_list = []
+    for i in range(len(channel_names)):
+        # Find indices of neighbors from the adjacency matrix
+        neighbor_indices = np.where(adj_matrix[i] == 1)[0].tolist()
+        adj_list.append(neighbor_indices)
+        
+    return adj_list
+
+# ... The rest of the file (create_eeg_segments, EEGDataset) remains the same ...
 def create_eeg_segments(data, window_samples, overlap_samples=0):
     if data is None:
         return []
@@ -81,7 +90,6 @@ class EEGDataset(Dataset):
         self.clean_segments = clean_segments
         self.samples_per_epoch = samples_per_epoch
         self.noise_level = noise_level
-        
         cat_data = np.concatenate(self.clean_segments[:min(500, len(self.clean_segments))], axis=1)
         self.mean = np.mean(cat_data, axis=1, keepdims=True).astype(np.float32)
         self.std = np.std(cat_data, axis=1, keepdims=True).astype(np.float32)
@@ -93,82 +101,10 @@ class EEGDataset(Dataset):
         clean_segment_idx = np.random.randint(0, len(self.clean_segments))
         clean_segment = self.clean_segments[clean_segment_idx]
         clean_segment = (clean_segment - self.mean) / (self.std + 1e-8)
-
         signal_power = np.mean(clean_segment ** 2)
         noise = np.random.randn(*clean_segment.shape).astype(np.float32)
         noise_power = np.mean(noise ** 2) if np.mean(noise ** 2) > 0 else 1e-8
-        
         scale_factor = np.sqrt(signal_power * self.noise_level / noise_power)
         noise_scaled = noise * scale_factor
-        
         noisy_segment = clean_segment + noise_scaled
-
         return torch.from_numpy(noisy_segment), torch.from_numpy(clean_segment)
-
-if __name__ == '__main__':
-    DATA_DIR = "data/chb-mit-scalp-eeg-database-1.0.0/"
-    SAMPLE_FILE = os.path.join(DATA_DIR, "chb01/chb01_03.edf")
-    
-    if not os.path.exists(SAMPLE_FILE):
-        print(f"Error: Sample file not found at {SAMPLE_FILE}")
-        print("Please ensure your data is correctly placed.")
-    else:
-        print(f"--- Testing EEG Data Utilities with {SAMPLE_FILE} ---")
-        
-        print("1. Loading and preprocessing data...")
-        preprocessed_data = load_eeg_from_edf(SAMPLE_FILE)
-        assert preprocessed_data is not None, "Data loading failed."
-        print(f"   Success! Data shape: {preprocessed_data.shape} (Channels, Samples)")
-
-        print("\n2. Splitting data into 2-second segments...")
-        WINDOW_SAMPLES = 2 * TARGET_FS
-        segments = create_eeg_segments(preprocessed_data, WINDOW_SAMPLES)
-        assert len(segments) > 0, "Segmenting failed."
-        print(f"   Success! Created {len(segments)} segments of shape {segments[0].shape}")
-        
-        print("\n3. Initializing EEGDataset...")
-        dataset = EEGDataset(clean_segments=segments, samples_per_epoch=100)
-        assert len(dataset) == 100, "Dataset initialization failed."
-        noisy, clean = dataset[0]
-        print(f"   Success! Dataset returned noisy/clean pair with shape: {noisy.shape}")
-        
-        print("\n✅ Phase 0 Data Utilities are now robust and working correctly!")
-
-    
-# Add this code block to src/eeg_data_utils.py
-
-# A dictionary defining the neighbors for common 10-20 EEG channels
-EEG_1020_ADJACENCY = {
-    'FP1-F7': ['F7-T7', 'FP1-F3'],
-    'F7-T7': ['FP1-F7', 'T7-P7', 'F3-C3'],
-    'T7-P7': ['F7-T7', 'P7-O1', 'C3-P3'],
-    'P7-O1': ['T7-P7', 'P3-O1'],
-    'FP1-F3': ['FP1-F7', 'F3-C3', 'FZ-CZ'],
-    'F3-C3': ['FP1-F3', 'C3-P3', 'F7-T7', 'FZ-CZ'],
-    'C3-P3': ['F3-C3', 'P3-O1', 'T7-P7', 'CZ-PZ'],
-    'P3-O1': ['C3-P3', 'P7-O1', 'CZ-PZ'],
-    'FP2-F4': ['FP2-F8', 'F4-C4', 'FZ-CZ'],
-    'F4-C4': ['FP2-F4', 'C4-P4', 'F8-T8', 'FZ-CZ'],
-    'C4-P4': ['F4-C4', 'P4-O2', 'T8-P8', 'CZ-PZ'],
-    'P4-O2': ['C4-P4', 'P8-O2', 'CZ-PZ'],
-    'FP2-F8': ['FP2-F4', 'F8-T8'],
-    'F8-T8': ['FP2-F8', 'T8-P8', 'F4-C4'],
-    'T8-P8': ['F8-T8', 'P8-O2', 'C4-P4'],
-    'P8-O2': ['T8-P8', 'P4-O2'],
-    'FZ-CZ': ['FP1-F3', 'F3-C3', 'FP2-F4', 'F4-C4', 'CZ-PZ'],
-    'CZ-PZ': ['FZ-CZ', 'C3-P3', 'P3-O1', 'C4-P4', 'P4-O2'],
-    # Add any other channels from your robust list if needed
-}
-
-def get_adjacency_list(channel_names):
-    """
-    Creates a list of neighbor indices based on a list of channel names.
-    This is what the loss function will use.
-    """
-    adj_list = []
-    channel_indices = {name.upper(): i for i, name in enumerate(channel_names)}
-    for i, ch_name in enumerate(channel_names):
-        neighbors = EEG_1020_ADJACENCY.get(ch_name.upper(), [])
-        neighbor_indices = [channel_indices[n.upper()] for n in neighbors if n.upper() in channel_indices]
-        adj_list.append(neighbor_indices)
-    return adj_list
