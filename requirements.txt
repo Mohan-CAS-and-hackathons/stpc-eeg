@@ -21,3 +21,8 @@ wfdb
 
 # Web Application
 streamlit
+
+mne
+pyEDFlib
+imageio
+umap-learn

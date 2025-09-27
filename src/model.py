@@ -5,7 +5,6 @@ import torch.nn as nn
 class ConvBlock(nn.Module):
     """
     A basic building block: two 1D convolutions + BatchNorm + ReLU.
-    Stabilizes training and learns complex temporal patterns.
     """
     def __init__(self, in_channels, out_channels):
         super(ConvBlock, self).__init__()
@@ -23,9 +22,9 @@ class ConvBlock(nn.Module):
 
 class UNet1D(nn.Module):
     """
-    1D U-Net for ECG denoising.
-    Encoder → Bottleneck → Decoder with skip connections.
+    1D U-Net for denoising. Now supports multi-channel input.
     """
+    # MODIFICATION: Changed the __init__ signature to accept in_channels and out_channels
     def __init__(self, in_channels=1, out_channels=1, features=[64, 128, 256, 512]):
         super(UNet1D, self).__init__()
         self.encoder = nn.ModuleList()
@@ -33,9 +32,11 @@ class UNet1D(nn.Module):
         self.pool = nn.MaxPool1d(kernel_size=2, stride=2)
 
         # Encoder
+        # MODIFICATION: The first encoder block uses the provided `in_channels`
+        current_channels = in_channels
         for feature in features:
-            self.encoder.append(ConvBlock(in_channels, feature))
-            in_channels = feature
+            self.encoder.append(ConvBlock(current_channels, feature))
+            current_channels = feature
 
         # Bottleneck
         self.bottleneck = ConvBlock(features[-1], features[-1] * 2)
@@ -45,9 +46,12 @@ class UNet1D(nn.Module):
             self.decoder.append(
                 nn.ConvTranspose1d(feature * 2, feature, kernel_size=2, stride=2)
             )
+            # The input to this ConvBlock is the concatenated skip connection
+            # The number of channels is feature (from skip) + feature (from up-conv) = feature * 2
             self.decoder.append(ConvBlock(feature * 2, feature))
 
         # Final projection layer
+        # MODIFICATION: The final layer projects to the desired number of `out_channels`
         self.final_conv = nn.Conv1d(features[0], out_channels, kernel_size=1)
 
     def forward(self, x):
@@ -61,7 +65,7 @@ class UNet1D(nn.Module):
 
         # Bottleneck
         x = self.bottleneck(x)
-
+        
         # Reverse skip connections for correct order
         skip_connections = skip_connections[::-1]
 
@@ -70,13 +74,11 @@ class UNet1D(nn.Module):
             x = self.decoder[i](x)  # up-conv
             skip_connection = skip_connections[i // 2]
 
-            # Fix shape mismatch (rounding issue from pooling)
             if x.shape != skip_connection.shape:
                 x = nn.functional.interpolate(
                     x, size=skip_connection.shape[2], mode='linear', align_corners=False
                 )
 
-            # Concatenate skip + upsample
             concat_skip = torch.cat((skip_connection, x), dim=1)
             x = self.decoder[i + 1](concat_skip)
 
