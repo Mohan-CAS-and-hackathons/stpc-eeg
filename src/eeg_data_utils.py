@@ -109,3 +109,34 @@ class EEGDataset(Dataset):
         scale_factor = np.sqrt(signal_power * self.noise_level / noise_power)
         noise_scaled = noise * scale_factor
         return torch.from_numpy(clean_segment + noise_scaled), torch.from_numpy(clean_segment)
+    
+    # In src/eeg_data_utils.py, add this new class at the end of the file
+
+class MaskedEEGDataset(EEGDataset):
+    """
+    Inherits from EEGDataset but modifies the __getitem__ to return
+    a masked version of the clean signal as the input 'x'.
+    The target 'y' remains the original clean signal.
+    """
+    def __init__(self, clean_segments, samples_per_epoch, mask_ratio=0.4):
+        super().__init__(clean_segments, samples_per_epoch)
+        self.mask_ratio = mask_ratio
+
+    def __getitem__(self, idx):
+        # 1. Get a normalized clean segment from the parent class
+        _, clean_segment_norm = super().__getitem__(idx)
+        
+        # 2. Create a random mask
+        # We create a mask that is the same across all channels for simplicity
+        B, C, T = 1, clean_segment_norm.shape[0], clean_segment_norm.shape[1]
+        # Number of time points to mask
+        num_masked = int(self.mask_ratio * T)
+        # Randomly choose indices to mask
+        masked_indices = np.random.choice(T, num_masked, replace=False)
+        
+        masked_segment = clean_segment_norm.clone()
+        # Set the chosen time points to zero (or the mean value)
+        masked_segment[:, masked_indices] = 0
+        
+        # The model's input is the masked signal, target is the original clean signal
+        return masked_segment, clean_segment_norm

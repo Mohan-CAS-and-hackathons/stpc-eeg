@@ -53,6 +53,23 @@ class UNet1D(nn.Module):
         # Final projection layer
         # MODIFICATION: The final layer projects to the desired number of `out_channels`
         self.final_conv = nn.Conv1d(features[0], out_channels, kernel_size=1)
+        
+    def encode(self, x):
+        """
+        Runs the input through the encoder part of the U-Net and returns
+        the feature representation from the bottleneck, pooled into a vector.
+        """
+        # Encoder path
+        for down in self.encoder:
+            x = down(x)
+            x = self.pool(x)
+
+        # Bottleneck
+        x = self.bottleneck(x)
+        
+        # Global average pooling to get a fixed-size vector representation
+        embedding = torch.mean(x, dim=-1)
+        return embedding
 
     def forward(self, x):
         skip_connections = []
