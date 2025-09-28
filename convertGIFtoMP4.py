@@ -1,6 +1,5 @@
 from moviepy import VideoFileClip
 
-
 # Load the GIF
 clip = VideoFileClip("results/phase1_spatial_comparison.gif")
 

@@ -6,49 +6,29 @@ import plotly.graph_objects as go
 from PIL import Image
 import torch
 from collections import Counter
-import os
-import sys
-import os, pathlib, base64
-import streamlit as st
+import os, sys, pathlib, base64
 
-# ==============================================================================
-# SYSTEM SETUP: Definitive fix for Streamlit Cloud deployment.
-# ==============================================================================
+# --- System Setup ---
 project_root = os.path.dirname(os.path.abspath(__file__))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
-# ==============================================================================
 
-# --- Import our project's source code ---
-from src.inference import denoise_ecg_signal, DEVICE
-from src.data_utils import TARGET_FS
-from src.classifier_model import ECGClassifier
-from src.model import UNet1D
+# --- UPDATED IMPORTS ---
+from src.stpc.inference import denoise_ecg_signal, DEVICE
+from src.stpc.utils.ecg_utils import TARGET_FS
+from src.stpc.model import UNet1D, ECGClassifier
+# ---
 
-
-
-# --- Page Configuration ---
 st.set_page_config(
     page_title="STPC: AI for Reliable Cardiac Diagnostics",
     page_icon="❤️",
     layout="wide",
 )
 
-# --- SIMPLIFIED BEAT MAPPING for Clarity ---
-# This maps the detailed PhysioNet symbols to the 5 standard AAMI classes
-BEAT_CLASSES_AAMI = {
-    'N': 0, 'L': 0, 'R': 0, 'e': 0, 'j': 0,  # Normal (N)
-    'A': 1, 'a': 1, 'J': 1, 'S': 1,         # Supraventricular (S)
-    'V': 2, 'E': 2,                         # Ventricular (V)
-    'F': 3,                                 # Fusion (F)
-    'Q': 4, '?': 4, '|': 4, '/': 4,         # Unknown (Q)
-}
 INT_TO_AAMI_CLASS = {0: 'Normal (N)', 1: 'Supraventricular (S)', 2: 'Ventricular (V)', 3: 'Fusion (F)', 4: 'Unknown (Q)'}
 
-# --- Model Loading ---
 @st.cache_resource
 def get_models():
-    """Load and cache the best denoiser and the classifier."""
     denoiser, classifier = None, None
     try:
         denoiser = UNet1D(in_channels=1, out_channels=1)
@@ -60,12 +40,12 @@ def get_models():
         classifier.to(DEVICE); classifier.eval()
         print("✅ Models loaded successfully.")
     except Exception as e:
-        st.error(f"Fatal Error loading models: {e}. Please ensure model files exist in the 'models/' directory.")
+        st.error(f"Fatal Error loading models: {e}.")
     return denoiser, classifier
 
 denoiser_model, classifier_model = get_models()
 
-# --- Analysis & Plotting Functions ---
+# --- Analysis & Plotting Functions (No changes needed here) ---
 def analyze_ecg(signal, fs):
     try:
         peaks, _ = find_peaks(signal, height=np.mean(signal) + 0.75 * np.std(signal), distance=fs * 0.4)
@@ -98,6 +78,8 @@ def create_ecg_plot(signal, peaks, title, fs):
         fig.add_trace(go.Scatter(x=time_axis[peaks], y=signal[peaks], mode='markers', name='R-peaks', marker=dict(color='red', size=8, symbol='x')))
     fig.update_layout(title_text=title, xaxis_title="Time (s)", yaxis_title="Amplitude", legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
     return fig
+
+
 
 # --- Main App UI ---
 st.title("❤️ STPC: From Noise to Diagnosis")
