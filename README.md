@@ -117,6 +117,15 @@ Code
 
 ---
 
+## Project Hub and Archival
+
+This project is officially archived and documented on the Open Science Framework (OSF) and Zenodo.
+
+*   **OSF Project Page:** [https://osf.io/YOUR_PROJECT_ID/](https://osf.io/YOUR_PROJECT_ID/)
+*   **Citable DOI (Zenodo):** [https://doi.org/10.5281/zenodo.YOUR_DOI_NUMBER](https://doi.org/10.5281/zenodo.YOUR_DOI_NUMBER)
+
+---
+
 ## How to Contribute
 
 We welcome contributions of all kinds! Please see our `CONTRIBUTING.md` file for detailed guidelines on how to report bugs, propose new features or experiments, and submit pull requests.
