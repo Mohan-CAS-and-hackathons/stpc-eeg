@@ -1,0 +1,7 @@
+# Ignore LaTeX temporary compilation files
+*.aux
+*.bcf
+*.log
+*.out
+*.run.xml
+*.synctex.gz
