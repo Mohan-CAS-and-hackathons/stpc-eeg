@@ -8,3 +8,11 @@ data/
 
 # OS-specific
 .DS_Store
+
+# LaTeX compilation files
+*.aux
+*.bcf
+*.log
+*.out
+*.run.xml
+*.synctex.gz
