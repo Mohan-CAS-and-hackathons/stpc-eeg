@@ -3,6 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/release/python-390/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-%23EE4C2C.svg?style=flat&logo=PyTorch&logoColor=white)](https://pytorch.org/)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.17218523.svg)](https://doi.org/10.5281/zenodo.17218523)
 
 This repository contains the official implementation of **Spectral-Temporal Physiological Consistency (STPC)**, a novel deep learning regularizer designed to produce trustworthy, physiologically plausible results when denoising and analyzing biomedical time-series signals like ECGs and EEGs.
 
@@ -121,8 +122,7 @@ Code
 
 This project is officially archived and documented on the Open Science Framework (OSF) and Zenodo.
 
-*   **OSF Project Page:** [https://osf.io/YOUR_PROJECT_ID/](https://osf.io/YOUR_PROJECT_ID/)
-*   **Citable DOI (Zenodo):** [https://doi.org/10.5281/zenodo.YOUR_DOI_NUMBER](https://doi.org/10.5281/zenodo.YOUR_DOI_NUMBER)
+*   **OSF Project Page:** [https://osf.io/kznd9/](https://osf.io/kznd9/)
 
 ---
 
