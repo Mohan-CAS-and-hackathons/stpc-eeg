@@ -1,58 +1,128 @@
-# STPC: A Physics-Aware AI Framework for Accessible Cardiac Diagnostics
+# STPC: A Physics-Informed Framework for Trustworthy Biomedical AI
 
-[![Project Status: Complete](https://img.shields.io/badge/status-complete-green.svg)](https://github.com/Mohan-CAS-and-hackathons/ecg-denoiser-hackathon)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/release/python-390/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-%23EE4C2C.svg?style=flat&logo=PyTorch&logoColor=white)](https://pytorch.org/)
 
-This repository contains the complete source code, experimental data, and final research paper for the STPC project, a novel AI framework designed to make cardiac diagnostics reliable and accessible, even with noisy data from low-cost devices.
+This repository contains the official implementation of **Spectral-Temporal Physiological Consistency (STPC)**, a novel deep learning regularizer designed to produce trustworthy, physiologically plausible results when denoising and analyzing biomedical time-series signals like ECGs and EEGs.
 
----
+The core principle is that for AI to be trusted in clinical settings, it must respect the underlying physics of the signals it analyzes. Traditional methods that only minimize amplitude error (like L1 or MSE loss) often produce oversmoothed or unrealistic outputs. STPC solves this by training models to simultaneously preserve three key properties:
 
-### Quick Links
-- **[🚀 View the Live Streamlit Demo](https://ecg-denoiser-hackathon-mohan.streamlit.app/)**
-- **[📄 Read the Full Research Paper (PDF)](STPC_Research_Paper.pdf)**
-- **[💻 Explore the Code](src)**
-
----
-
-### Project Showcase
-
-![Final Streamlit App Screenshot](assets/app_screenshot.png)
-*The final web application demonstrating the end-to-end pipeline: a noisy ECG is uploaded, cleaned by the STPC model, and analyzed, resulting in a corrected and reliable diagnosis in seconds.*
+1.  **Amplitude Consistency:** The signal's voltage levels are correct.
+2.  **Temporal-Gradient Consistency:** Sharp, high-velocity events (like a QRS spike or seizure onset) are preserved, preventing dangerous blurring.
+3.  **Spectral-Magnitude Consistency:** The signal's frequency "fingerprint" is maintained, ensuring it has a realistic harmonic profile.
 
 ---
 
-### The Core Innovation: STPC Framework
+## Key Results & Capabilities
 
-The central contribution of this project is the **Spectral-Temporal Physiological Consistency (STPC)** framework, a new physics-informed method for training deep learning models on biomedical signals.
+The STPC framework enables robust signal reconstruction and unlocks powerful downstream applications, from improving diagnostic accuracy to learning meaningful neural representations from unlabeled data.
 
-Traditional models often fail because they only match a signal's shape, leading to oversmoothing of critical features. The STPC framework teaches the AI the **physics of a real heartbeat** by forcing it to preserve three key properties simultaneously:
+### 1. Superior Denoising → Improved Clinical Diagnosis (ECG)
 
-1.  **Amplitude Consistency:** The correct voltage and overall shape.
-2.  **Temporal-Gradient Consistency:** A custom gradient loss that preserves the sharp, high-velocity spikes of a heartbeat (the QRS complex).
-3.  **Spectral-Magnitude Consistency:** An FFT-based loss that ensures the denoised signal has a realistic frequency profile.
+By first cleaning a noisy ECG with an STPC-trained denoiser, we dramatically improve the accuracy of a downstream arrhythmia classifier. The F1-score for detecting critical **Ventricular beats increased by 35%**, and for **Supraventricular beats by 85%**.
 
-This results in a denoised signal that is not just clean, but **physiologically faithful** and trustworthy enough for downstream diagnostic tasks. Our research shows this approach leads to a measurable improvement in arrhythmia classification accuracy.
+|           Classifier on Raw Noisy Signal           |               Classifier on STPC-Denoised Signal                |
+| :------------------------------------------------: | :-------------------------------------------------------------: |
+| <img src="results/final_cm_noisy.png" width="400"> | <img src="results/final_cm_stpc_full_denoised.png" width="400"> |
+
+### 2. Generalization to Complex Neurological Signals (EEG)
+
+STPC is a general principle, not just an ECG-specific trick. When applied to a noisy EEG signal during a seizure, it flawlessly preserves the sharp, diagnostically critical spike morphology, while a standard L1 model fails.
+
+![EEG Gradient Preservation](results/eeg_gradient_preservation_plot.png)
+
+### 3. Unsupervised Discovery of Brain States
+
+This is the most powerful application. By training an STPC-regularized model on a self-supervised task (masked signal reconstruction), the model spontaneously learns to differentiate between healthy and pathological brain states **without ever seeing a single label**. The learned embeddings form distinct clusters, proving the model has discovered a meaningful, high-level "vocabulary" of the brain.
+
+|      Spatially Incoherent (L1 Only) vs. Plausible (STPC)      |       Learned Embeddings Separate Seizure vs. Non-Seizure       |
+| :-----------------------------------------------------------: | :-------------------------------------------------------------: |
+| <img src="results/phase1_spatial_comparison.gif" width="400"> | <img src="results/phase3_embedding_comparison.png" width="400"> |
+
+---
+
+## Getting Started
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/Mohan-CAS-and-hackathons/ecg-denoising-research.git
+cd ecg-denoising-research
+```
+
+### 2. Set Up the Environment
+
+We recommend using a virtual environment (e.g., venv or conda).
+
+```bash
+# Create and activate a virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# Install all required packages
+pip install -r requirements.txt
+```
+
+### 3. Download the Data
+
+Our experiments use public datasets from PhysioNet. We provide scripts and instructions in the notebooks and tutorials for downloading the necessary files (MIT-BIH Arrhythmia Database, MIT-BIH Noise Stress Test Database, CHB-MIT Scalp EEG Database).
 
 ---
 
-### How to Run Locally
+## Running Experiments
 
-1.  **Clone the repository:**
-    ```bash
-    git clone https://github.com/Mohan-CAS-and-hackathons/ecg-denoiser-hackathon.git
-    cd ecg-denoiser-hackathon
-    ```
+The refactored codebase uses a unified experiment runner for all training and validation tasks. (Note: This is the target structure. Configuration files will be added soon).
 
-2.  **Install dependencies:**
-    ```bash
-    pip install -r requirements.txt
-    ```
+### Training a Model
 
-3.  **Run the Streamlit application:**
-    ```bash
-    streamlit run app.py
-    ```
+To train a model for a specific experiment, use `experiments/run_training.py`.
+
+Example: Train the self-supervised EEG model
+
+```bash
+python -m experiments.run_training --experiment eeg_self_supervised --config configs/eeg_self_supervised.yaml
+```
+
+### Validating a Model
+
+To validate a trained model and generate result plots, use `experiments/run_validation.py`.
+
+Example: Generate the UMAP plot from the self-supervised model
+
+```bash
+python -m experiments.run_validation --experiment eeg_self_supervised --model_path models/eeg_denoiser_self_supervised.pth
+```
 
 ---
-### Acknowledgements
-This work was made possible by the open-source community and public datasets provided by PhysioNet.
+
+## Project Structure
+
+```
+Code
+├── assets/               # Images and GIFs for documentation
+├── data/                 # Placeholder for downloaded datasets
+├── models/               # Placeholder for trained model weights (.pth)
+├── notebooks/            # Original experimental and exploratory notebooks
+├── results/              # Output from validation scripts (plots, matrices)
+├── src/
+│   ├── stpc/             # Core STPC library (models, losses, data handlers)
+│   └── experiments/      # High-level runnable scripts (run_training.py, etc.)
+├── tutorials/            # Step-by-step guides for learning the framework
+├── app.py                # Interactive Streamlit demo application
+├── CONTRIBUTING.md       # Guidelines for contributors
+├── LICENSE               # Project license (MIT)
+└── README.md             # You are here!
+```
+
+---
+
+## How to Contribute
+
+We welcome contributions of all kinds! Please see our `CONTRIBUTING.md` file for detailed guidelines on how to report bugs, propose new features or experiments, and submit pull requests.
+
+---
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
