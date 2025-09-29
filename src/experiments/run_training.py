@@ -274,8 +274,21 @@ if __name__ == "__main__":
     p_ecg_class.add_argument("--save_path", type=str, required=True)
     p_ecg_class.add_argument("--epochs", type=int, default=20)
 
-    p_eeg = subparsers.add_parser("eeg", help="Train an EEG model.")
-    # (EEG parser arguments are unchanged)
+    p_eeg = subparsers.add_parser("eeg", help="Train an EEG model (baseline, spatial, frequency, or self-supervised).")
+    
+    p_eeg.add_argument(
+        "--eeg_experiment_type", 
+        type=str, 
+        default='baseline',
+        choices=['baseline', 'spatial', 'frequency', 'self_supervised'],
+        required=True,
+        help="The specific type of EEG experiment to run."
+    )
+    p_eeg.add_argument("--data_dir", type=str, required=True, help="Path to the root EEG data directory (e.g., 'chb-mit-scalp-eeg-database-1.0.0').")
+    p_eeg.add_argument("--save_path", type=str, required=True, help="Full path where the trained model will be saved.")
+    p_eeg.add_argument("--epochs", type=int, default=10, help="Number of training epochs.")
+    p_eeg.add_argument('--alpha', type=float, default=1.0, help='Weight for temporal gradient loss (for spatial experiment).')
+    p_eeg.add_argument('--beta', type=float, default=1.0, help='Weight for spatial laplacian loss (for spatial experiment).')
     
     args = parser.parse_args()
 
