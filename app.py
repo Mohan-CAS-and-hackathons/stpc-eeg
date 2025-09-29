@@ -141,7 +141,7 @@ with tab1:
                 st.subheader("Original Noisy Signal")
                 st.metric("Heart Rate", hr_noisy)
                 st.metric("Rhythm", rhythm_noisy)
-                st.plotly_chart(create_ecg_plot(denoised_signal_np, peaks_denoised, "AI Denoised ECG (STPC Model)", TARGET_FS), use_container_width=True)
+                st.plotly_chart(create_ecg_plot(noisy_signal_np, peaks_noisy, "Original Noisy ECG", TARGET_FS), use_container_width=True, key=1)
             
             with col2:
                 st.subheader("AI Denoised & Analyzed Signal")
@@ -150,7 +150,7 @@ with tab1:
                 if beat_counts:
                     st.markdown("**Detected Beat Types:**")
                     st.json(dict(beat_counts))
-                st.plotly_chart(create_ecg_plot(denoised_signal_np, peaks_denoised, "AI Denoised ECG (STPC Model)", TARGET_FS), use_container_width=True)
+                st.plotly_chart(create_ecg_plot(denoised_signal_np, peaks_denoised, "AI Denoised ECG (STPC Model)", TARGET_FS), use_container_width=True, key=2)
         except Exception as e:
             st.error(f"An error occurred during processing. Please ensure the uploaded file is a single-column CSV. Error: {e}")
     else:
@@ -319,4 +319,4 @@ with tab4:
         """
     )
     st.link_button("View on GitHub", "https://github.com/Mohan-CAS-and-hackathons/ecg-denoiser-hackathon")
-    st.link_button("Read the Full Research Paper", "https://github.com/Mohan-CAS-and-hackathons/ecg-denoiser-hackathon/blob/main/STPC_Research_Paper.pdf")
+    st.link_button("Read the Full Research Paper", "https://github.com/Mohan-CAS-and-hackathons/stpc-eeg/blob/main/manuscript/main.pdf")
