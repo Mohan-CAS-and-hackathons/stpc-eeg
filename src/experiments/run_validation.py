@@ -133,87 +133,72 @@ def validate_ecg_downstream(args):
 def validate_eeg(args):
     print(f"--- Running EEG Validation: {args.eeg_experiment_type} ---")
     
-    # --- Logic for SPATIAL experiment ---
     if args.eeg_experiment_type == 'spatial':
         clean_data, final_ch_names, info = load_eeg_from_edf(args.test_file_path)
         NUM_CHANNELS = len(final_ch_names)
-        
         stats = np.load(os.path.join(os.path.dirname(args.baseline_model_path), "norm_stats.npz"))
         mean, std = stats['mean'], stats['std']
-
         baseline_model = UNet1D(in_channels=NUM_CHANNELS, out_channels=NUM_CHANNELS).to(DEVICE)
         baseline_model.load_state_dict(torch.load(args.baseline_model_path, map_location=DEVICE)); baseline_model.eval()
-        
         spatial_model = UNet1D(in_channels=NUM_CHANNELS, out_channels=NUM_CHANNELS).to(DEVICE)
         spatial_model.load_state_dict(torch.load(args.spatial_model_path, map_location=DEVICE)); spatial_model.eval()
-
         start = 2996 * EEG_FS; end = start + (4 * EEG_FS)
         clean_segment = clean_data[:, start:end]
         noise = np.random.randn(*clean_segment.shape).astype(np.float32) * np.std(clean_segment) * 1.5
         noisy_segment = clean_segment + noise
-        
         noisy_norm = (noisy_segment - mean) / (std + 1e-8)
         noisy_tensor = torch.from_numpy(noisy_norm).float().unsqueeze(0).to(DEVICE)
         with torch.no_grad():
             denoised_baseline = (baseline_model(noisy_tensor).squeeze(0).cpu().numpy() * (std + 1e-8)) + mean
             denoised_spatial = (spatial_model(noisy_tensor).squeeze(0).cpu().numpy() * (std + 1e-8)) + mean
-            
         data_for_video = {"Ground Truth": clean_segment, "Noisy Input": noisy_segment,
                           "Denoised (Baseline L1)": denoised_baseline, "Denoised (Spatial STPC)": denoised_spatial}
         create_topomap_video(data_for_video, info, args.output_path)
 
-    # --- Logic for FREQUENCY experiment ---
     elif args.eeg_experiment_type == 'frequency':
         clean_data, final_ch_names, _ = load_eeg_from_edf(args.test_file_path)
         NUM_CHANNELS = len(final_ch_names)
         stats = np.load(os.path.join(os.path.dirname(args.frequency_model_path), "norm_stats.npz"))
         mean, std = stats['mean'], stats['std']
-        
         frequency_model = UNet1D(in_channels=NUM_CHANNELS, out_channels=NUM_CHANNELS).to(DEVICE)
         frequency_model.load_state_dict(torch.load(args.frequency_model_path, map_location=DEVICE)); frequency_model.eval()
-
         start = 1800 * EEG_FS; end = start + (4 * EEG_FS)
         clean_segment = clean_data[:, start:end]
-        low_freq = np.sin(2*np.pi*1.5*np.linspace(0, 4, clean_segment.shape[1])) * np.std(clean_segment)*2
-        high_freq = np.random.randn(*clean_segment.shape) * np.std(clean_segment)*0.5
+        low_freq = np.sin(2*np.pi*1.5*np.linspace(0, 4, clean_segment.shape[1]))*np.std(clean_segment)*2
+        high_freq = np.random.randn(*clean_segment.shape)*np.std(clean_segment)*0.5
         noisy_segment = clean_segment + low_freq + high_freq
-        
         noisy_norm = (noisy_segment - mean) / (std + 1e-8)
         noisy_tensor = torch.from_numpy(noisy_norm).float().unsqueeze(0).to(DEVICE)
         with torch.no_grad():
             denoised_frequency = (frequency_model(noisy_tensor).squeeze(0).cpu().numpy() * (std + 1e-8)) + mean
-            
         data_for_plot = {"Noisy Input": noisy_segment, "Ground Truth": clean_segment,
                          "Denoised (Frequency STPC)": denoised_frequency}
         create_psd_plot(data_for_plot, args.output_path)
 
-    # --- Logic for SELF-SUPERVISED experiment ---
     elif args.eeg_experiment_type == 'self_supervised':
         seizure_data, _, _ = load_eeg_from_edf(os.path.join(args.data_dir, 'chb01/chb01_03.edf'))
         non_seizure_data, ch_names, _ = load_eeg_from_edf(os.path.join(args.data_dir, 'chb01/chb01_01.edf'))
         NUM_CHANNELS = len(ch_names)
-
         seizure_segs = create_eeg_segments(seizure_data, 2 * EEG_FS)
         non_seizure_segs = create_eeg_segments(non_seizure_data, 2 * EEG_FS)
         test_segments = np.array(non_seizure_segs[850:1050] + seizure_segs[1400:1600])
         test_labels = np.array([0]*200 + [1]*200)
-
         model = UNet1D(in_channels=NUM_CHANNELS, out_channels=NUM_CHANNELS).to(DEVICE)
         model.load_state_dict(torch.load(args.self_supervised_model_path, map_location=DEVICE)); model.eval()
-        
         stats = np.load(os.path.join(os.path.dirname(args.self_supervised_model_path), "norm_stats.npz"))
         mean, std = stats['mean'], stats['std']
-
         test_segments_norm = (test_segments - mean) / (std + 1e-8)
         test_dataset = torch.utils.data.TensorDataset(torch.from_numpy(test_segments_norm).float(), torch.from_numpy(test_labels))
         test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=32)
         create_embedding_plot(model, test_loader, args.output_path)
 
+# ==============================================================================
+#                               MAIN SCRIPT LOGIC
+# ==============================================================================
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Unified Validation Runner")
     subparsers = parser.add_subparsers(dest="experiment", required=True)
 
-    # --- ECG VALIDATION PARSER ---
     p_ecg = subparsers.add_parser("ecg_downstream", help="Run ECG downstream classification validation.")
     p_ecg.add_argument("--denoiser_path", type=str, required=True)
     p_ecg.add_argument("--classifier_path", type=str, required=True)
@@ -223,31 +208,31 @@ if __name__ == "__main__":
     p_ecg.add_argument("--record_name", type=str, default="201")
     p_ecg.add_argument("--snr_db", type=int, default=0)
 
-    # --- EEG VALIDATION PARSER ---
     p_eeg = subparsers.add_parser("eeg", help="Run EEG validation tasks.")
     p_eeg.add_argument("--eeg_experiment_type", type=str, required=True,
                        choices=['spatial', 'frequency', 'self_supervised'])
     p_eeg.add_argument("--data_dir", type=str, required=True)
     p_eeg.add_argument("--output_path", type=str, required=True)
-    # Model paths are optional; only the relevant ones are needed for each experiment
     p_eeg.add_argument("--baseline_model_path", type=str)
     p_eeg.add_argument("--spatial_model_path", type=str)
     p_eeg.add_argument("--frequency_model_path", type=str)
     p_eeg.add_argument("--self_supervised_model_path", type=str)
-    # Add test file path for spatial and frequency
     p_eeg.add_argument("--test_file_path", type=str)
     
     args = parser.parse_args()
 
-    # --- Route to the correct validation function ---
     if args.experiment == "ecg_downstream":
         validate_ecg_downstream(args)
     elif args.experiment == "eeg":
-        # Check for required model paths for each EEG experiment
-        if args.eeg_experiment_type == 'spatial' and (not args.baseline_model_path or not args.spatial_model_path):
-            parser.error("--baseline_model_path and --spatial_model_path are required for 'spatial' experiment.")
-        if args.eeg_experiment_type == 'frequency' and not args.frequency_model_path:
-            parser.error("--frequency_model_path is required for 'frequency' experiment.")
-        if args.eeg_experiment_type == 'self_supervised' and not args.self_supervised_model_path:
-            parser.error("--self_supervised_model_path is required for 'self_supervised' experiment.")
+        if args.eeg_experiment_type == 'spatial':
+            if not all([args.baseline_model_path, args.spatial_model_path, args.test_file_path]):
+                parser.error("Spatial experiment requires --baseline_model_path, --spatial_model_path, and --test_file_path.")
+        elif args.eeg_experiment_type == 'frequency':
+            if not all([args.frequency_model_path, args.test_file_path]):
+                parser.error("Frequency experiment requires --frequency_model_path and --test_file_path.")
+        elif args.eeg_experiment_type == 'self_supervised':
+            if not args.self_supervised_model_path:
+                parser.error("--self_supervised_model_path is required.")
+        
+        # This is the corrected call
         validate_eeg(args)
