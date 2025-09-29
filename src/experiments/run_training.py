@@ -19,11 +19,11 @@ if project_root not in sys.path:
 # ==============================================================================
 
 # --- Import from our STPC library ---
-from stpc.model import UNet1D, ECGClassifier
-from stpc.losses import GradientLoss, FFTLoss, LaplacianLoss, BandMaskedFFTLoss
-from stpc.data import PhysioNetDataset, ECGBeatDataset, EEGDataset, MaskedEEGDataset
-from stpc.utils.ecg_utils import get_all_record_names, get_noise_signals, load_all_beats_from_dataset, load_and_resample_signal as load_ecg_signal
-from stpc.utils.eeg_utils import load_eeg_from_edf, create_eeg_segments, get_adjacency_list, find_common_monopolar_channels
+from src.stpc.model import UNet1D, ECGClassifier
+from src.stpc.losses import GradientLoss, FFTLoss, LaplacianLoss, BandMaskedFFTLoss
+from src.stpc.data import PhysioNetDataset, ECGBeatDataset, EEGDataset, MaskedEEGDataset
+from src.stpc.utils.ecg_utils import get_all_record_names, get_noise_signals, load_all_beats_from_dataset, load_and_resample_signal as load_ecg_signal
+from src.stpc.utils.eeg_utils import load_eeg_from_edf, create_eeg_segments, get_adjacency_list, find_common_monopolar_channels
 
 # --- Global Configuration ---
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -48,7 +48,7 @@ def train_ecg_denoiser(args):
     
     print("Scanning for record names and loading noise signals...")
     all_record_names = get_all_record_names(args.data_dir)
-    noise_signals = get_noise_signals(args.noise_dir)
+    noise_signals = get_noise_signals(args.noise_dir, target_fs=250)
 
     loss_recon, loss_grad, loss_fft = nn.L1Loss(), GradientLoss(), FFTLoss()
     scaler = torch.cuda.amp.GradScaler(enabled=(DEVICE=='cuda'))
@@ -59,7 +59,7 @@ def train_ecg_denoiser(args):
         
         clean_signals = []
         for name in tqdm(records_for_epoch, desc="Loading signals"):
-            signal = load_ecg_signal(os.path.join(args.data_dir, name))
+            signal = load_ecg_signal(os.path.join(args.data_dir, name), target_fs=250)
             if signal is not None and len(signal) > config.SEGMENT_LENGTH_SAMPLES:
                 clean_signals.append(signal)
 

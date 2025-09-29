@@ -22,9 +22,9 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 # ==============================================================================
 
-from stpc.model import UNet1D, ECGClassifier
-from stpc.utils.ecg_utils import TARGET_FS as ECG_FS, BEAT_CLASSES, BEAT_WINDOW_SIZE, get_noise_signals, load_and_resample_signal as load_ecg_signal, working_directory
-from stpc.utils.eeg_utils import load_eeg_from_edf, create_eeg_segments, TARGET_FS as EEG_FS
+from src.stpc.model import UNet1D, ECGClassifier
+from src.stpc.utils.ecg_utils import TARGET_FS as ECG_FS, BEAT_CLASSES, BEAT_WINDOW_SIZE, get_noise_signals, load_and_resample_signal as load_ecg_signal, working_directory
+from src.stpc.utils.eeg_utils import load_eeg_from_edf, create_eeg_segments, TARGET_FS as EEG_FS
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -92,11 +92,11 @@ def validate_ecg_downstream(args):
     classifier.load_state_dict(torch.load(args.classifier_path, map_location=DEVICE)); classifier.eval()
 
     with working_directory(args.data_dir):
-        clean_signal = load_ecg_signal(args.record_name)
+        clean_signal = load_ecg_signal(args.record_name, target_fs=ECG_FS)
         annotation = wfdb.rdann(args.record_name, 'atr')
     true_samples = (annotation.sample * (ECG_FS / annotation.fs)).astype('int64')
 
-    noise_signals = get_noise_signals(args.noise_dir)
+    noise_signals = get_noise_signals(args.noise_dir, target_fs=ECG_FS)
     noise = np.tile(noise_signals['muscle_artifact'], int(np.ceil(len(clean_signal)/len(noise_signals['muscle_artifact']))))[:len(clean_signal)]
     power_clean = np.mean(clean_signal**2)
     scaling = np.sqrt((power_clean / (10**(args.snr_db / 10))) / np.mean(noise**2))
