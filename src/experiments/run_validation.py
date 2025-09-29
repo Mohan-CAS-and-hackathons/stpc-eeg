@@ -134,26 +134,36 @@ def validate_eeg(args):
     print(f"--- Running EEG Validation: {args.eeg_experiment_type} ---")
     
     if args.eeg_experiment_type == 'spatial':
+        # DEFINITIVE FIX: Use the info object returned by the data loader
         clean_data, final_ch_names, info = load_eeg_from_edf(args.test_file_path)
+        if info is None: raise RuntimeError("Failed to load data or create MNE info object.")
         NUM_CHANNELS = len(final_ch_names)
+        
         stats = np.load(os.path.join(os.path.dirname(args.baseline_model_path), "norm_stats.npz"))
         mean, std = stats['mean'], stats['std']
+
         baseline_model = UNet1D(in_channels=NUM_CHANNELS, out_channels=NUM_CHANNELS).to(DEVICE)
         baseline_model.load_state_dict(torch.load(args.baseline_model_path, map_location=DEVICE)); baseline_model.eval()
+        
         spatial_model = UNet1D(in_channels=NUM_CHANNELS, out_channels=NUM_CHANNELS).to(DEVICE)
         spatial_model.load_state_dict(torch.load(args.spatial_model_path, map_location=DEVICE)); spatial_model.eval()
+
         start = 2996 * EEG_FS; end = start + (4 * EEG_FS)
         clean_segment = clean_data[:, start:end]
         noise = np.random.randn(*clean_segment.shape).astype(np.float32) * np.std(clean_segment) * 1.5
         noisy_segment = clean_segment + noise
+        
         noisy_norm = (noisy_segment - mean) / (std + 1e-8)
         noisy_tensor = torch.from_numpy(noisy_norm).float().unsqueeze(0).to(DEVICE)
         with torch.no_grad():
             denoised_baseline = (baseline_model(noisy_tensor).squeeze(0).cpu().numpy() * (std + 1e-8)) + mean
             denoised_spatial = (spatial_model(noisy_tensor).squeeze(0).cpu().numpy() * (std + 1e-8)) + mean
+            
         data_for_video = {"Ground Truth": clean_segment, "Noisy Input": noisy_segment,
                           "Denoised (Baseline L1)": denoised_baseline, "Denoised (Spatial STPC)": denoised_spatial}
+        # Pass the correctly loaded and configured 'info' object
         create_topomap_video(data_for_video, info, args.output_path)
+
 
     elif args.eeg_experiment_type == 'frequency':
         clean_data, final_ch_names, _ = load_eeg_from_edf(args.test_file_path)
