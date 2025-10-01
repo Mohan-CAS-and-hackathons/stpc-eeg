@@ -7,6 +7,10 @@ from collections import Counter
 from scipy.signal import resample
 import contextlib
 
+from typing import Optional
+
+import numpy as np
+
 # --- DEFINITIVE FIX: A context manager to handle directory changes safely ---
 @contextlib.contextmanager
 def working_directory(path):
@@ -40,7 +44,7 @@ def get_all_record_names(data_path):
     except FileNotFoundError:
         return []
 
-def load_and_resample_signal(record_name, target_fs):
+def load_and_resample_signal(record_name: str, target_fs: int) -> Optional[np.ndarray]:
     """Loads a signal by its name from the CURRENT working directory."""
     try:
         record = wfdb.rdrecord(record_name)
