@@ -12,10 +12,10 @@ class PhysioNetDataset(Dataset):
     """
     A PyTorch dataset that generates noisy-clean ECG pairs on the fly.
     """
-    def __init__(self, clean_signals, noise_signals, config, num_samples_per_epoch):
+    def __init__(self, clean_signals, noise_signals, train_params: dict, num_samples_per_epoch: int):
         self.clean_signals = clean_signals
         self.noise_signals = noise_signals
-        self.config = config
+        self.train_params = train_params
         self.num_samples = num_samples_per_epoch
 
     def __len__(self):
@@ -23,14 +23,14 @@ class PhysioNetDataset(Dataset):
 
     def __getitem__(self, idx):
         clean_signal = random.choice(self.clean_signals)
-        snr_db = random.uniform(self.config.SNR_DB_MIN, self.config.SNR_DB_MAX)
+        snr_db = random.uniform(self.train_params['snr_db_min'], self.train_params['snr_db_max'])
         
         noisy_segment, clean_segment = None, None
         while noisy_segment is None: # Retry if generation fails
             noisy_segment, clean_segment = create_noisy_clean_pair(
                 clean_signal=clean_signal,
                 noise_signals=self.noise_signals,
-                segment_samples=self.config.SEGMENT_LENGTH_SAMPLES,
+                segment_samples=self.train_params['segment_samples'],
                 snr_db=snr_db
             )
 

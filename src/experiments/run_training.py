@@ -9,6 +9,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 import numpy as np
 from sklearn.model_selection import train_test_split
+import yaml
 
 # ==============================================================================
 #                      SETUP: Add project root to system path
@@ -32,43 +33,50 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 #                               ECG EXPERIMENTS
 # ==============================================================================
 
-def train_ecg_denoiser(args):
+def train_ecg_denoiser(config: dict):
+    run_params = config["run_params"]
+    train_params = config["training_params"]
+    loss_weights = config["loss_weights"]
+    paths = config["paths"]
+
+
+
     print("--- Training ECG Denoiser ---")
-    print(f"Config: Gradient Loss={args.use_gradient_loss}, FFT Loss={args.use_fft_loss}")
-    os.makedirs(os.path.dirname(args.save_path), exist_ok=True)
+    print(f"Config: Gradient Loss={config['experiment_name']}, Gradient Loss={run_params['use_gradient_loss']}, FFT Loss={config["use_fft_loss"]}")
+    os.makedirs(os.path.dirname(paths["save_path"]), exist_ok=True)
 
     class ECGConfig:
-        LEARNING_RATE, BATCH_SIZE, NUM_EPOCHS = 1e-4, 32, args.epochs
+        LEARNING_RATE, BATCH_SIZE, NUM_EPOCHS = 1e-4, 32, train_params["epochs"]
         SEGMENT_LENGTH_SAMPLES, SNR_DB_MIN, SNR_DB_MAX = 2048, -3, 12
         W_RECON, W_GRAD, W_FFT = 1.0, 0.5, 0.3
 
     config = ECGConfig()
     model = UNet1D(in_channels=1, out_channels=1).to(DEVICE)
-    optimizer = optim.AdamW(model.parameters(), lr=config.LEARNING_RATE)
+    optimizer = optim.AdamW(model.parameters(), lr=train_params['learning_rate'])
     
     print("Scanning for record names and loading noise signals...")
-    all_record_names = get_all_record_names(args.data_dir)
-    noise_signals = get_noise_signals(args.noise_dir, target_fs=250)
+    all_record_names = get_all_record_names(paths['data_dir'])
+    noise_signals = get_noise_signals(paths['noise_dir'], target_fs=250)
 
     loss_recon, loss_grad, loss_fft = nn.L1Loss(), GradientLoss(), FFTLoss()
     scaler = torch.cuda.amp.GradScaler(enabled=(DEVICE=='cuda'))
 
-    for epoch in range(config.NUM_EPOCHS):
+    for epoch in range(train_params['epochs']):
         print(f"\nEpoch {epoch+1}/{config.NUM_EPOCHS}: Loading a fresh subset of data...")
         records_for_epoch = np.random.choice(all_record_names, 20, replace=False)
         
         clean_signals = []
         for name in tqdm(records_for_epoch, desc="Loading signals"):
-            signal = load_ecg_signal(os.path.join(args.data_dir, name), target_fs=250)
-            if signal is not None and len(signal) > config.SEGMENT_LENGTH_SAMPLES:
+            signal = load_ecg_signal(os.path.join(paths['data_dir'], name), target_fs=250)
+            if signal is not None and len(signal) > train_params['segment_samples']:
                 clean_signals.append(signal)
 
         if not clean_signals:
             print("Warning: No usable signals loaded. Skipping epoch.")
             continue
 
-        train_dataset = PhysioNetDataset(clean_signals, noise_signals, config, num_samples_per_epoch=5000)
-        train_loader = DataLoader(train_dataset, batch_size=config.BATCH_SIZE, shuffle=True, num_workers=2, pin_memory=True)
+        train_dataset = PhysioNetDataset(clean_signals, noise_signals, train_params, num_samples_per_epoch=5000)
+        train_loader = DataLoader(train_dataset, batch_size=train_params['batch_size'], shuffle=True, num_workers=2, pin_memory=True)
         
         loop = tqdm(train_loader, desc="Training")
         total_loss = 0.0
@@ -76,9 +84,12 @@ def train_ecg_denoiser(args):
             noisy, clean = noisy.to(DEVICE), clean.to(DEVICE)
             with torch.autocast(device_type=DEVICE, dtype=torch.float16, enabled=(DEVICE=='cuda')):
                 denoised = model(noisy)
-                loss = loss_recon(denoised, clean) * config.W_RECON
-                if args.use_gradient_loss: loss += config.W_GRAD * loss_grad(denoised, clean)
-                if args.use_fft_loss: loss += config.W_FFT * loss_fft(denoised, clean)
+                loss = loss_recon(denoised, clean) * loss_weights['reconstruction']
+                if run_params['use_gradient_loss']: 
+                    loss += loss_weights['gradient'] * loss_grad(denoised, clean)
+                if run_params['use_fft_loss']: 
+                    loss += loss_weights['fft'] * loss_fft(denoised, clean)
+            
             
             optimizer.zero_grad()
             scaler.scale(loss).backward()
@@ -88,7 +99,7 @@ def train_ecg_denoiser(args):
             loop.set_postfix(loss=loss.item())
         
         print(f"Epoch {epoch+1} Avg Loss: {total_loss / len(loop):.6f}")
-        torch.save(model.state_dict(), args.save_path)
+        torch.save(model.state_dict(), paths['save_path'])
 
 def train_ecg_classifier(args):
     print("--- Training ECG Classifier ---")
@@ -223,38 +234,65 @@ def train_eeg_model(args):
 # ==============================================================================
 #                               MAIN SCRIPT LOGIC
 # ==============================================================================
+# if __name__ == "__main__":
+#     parser = argparse.ArgumentParser(description="Unified Training Runner for STPC Experiments")
+#     subparsers = parser.add_subparsers(dest="experiment", required=True)
+
+#     p_ecg_denoise = subparsers.add_parser("ecg_denoiser", help="Train ECG denoiser models.")
+#     p_ecg_denoise.add_argument("--data_dir", type=str, required=True)
+#     p_ecg_denoise.add_argument("--noise_dir", type=str, required=True)
+#     p_ecg_denoise.add_argument("--save_path", type=str, required=True)
+#     p_ecg_denoise.add_argument("--epochs", type=int, default=10)
+#     p_ecg_denoise.add_argument('--no-gradient-loss', dest='use_gradient_loss', action='store_false')
+#     p_ecg_denoise.add_argument('--no-fft-loss', dest='use_fft_loss', action='store_false')
+#     p_ecg_denoise.set_defaults(use_gradient_loss=True, use_fft_loss=True)
+
+#     p_ecg_class = subparsers.add_parser("ecg_classifier", help="Train the ECG beat classifier.")
+#     p_ecg_class.add_argument("--data_dir", type=str, required=True)
+#     p_ecg_class.add_argument("--save_path", type=str, required=True)
+#     p_ecg_class.add_argument("--epochs", type=int, default=5)
+
+#     p_eeg = subparsers.add_parser("eeg", help="Train EEG models.")
+#     p_eeg.add_argument("--eeg_experiment_type", type=str, required=True,
+#                        choices=['baseline', 'spatial', 'frequency', 'self_supervised'])
+#     p_eeg.add_argument("--data_dir", type=str, required=True)
+#     p_eeg.add_argument("--save_path", type=str, required=True)
+#     p_eeg.add_argument("--epochs", type=int, default=10)
+#     p_eeg.add_argument('--alpha', type=float, default=1.0)
+#     p_eeg.add_argument('--beta', type=float, default=1.0)
+    
+#     args = parser.parse_args()
+
+#     if args.experiment == "ecg_denoiser":
+#         train_ecg_denoiser(args)
+#     elif args.experiment == "ecg_classifier":
+#         train_ecg_classifier(args)
+#     elif args.experiment == "eeg":
+#         train_eeg_model(args)
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Unified Training Runner for STPC Experiments")
-    subparsers = parser.add_subparsers(dest="experiment", required=True)
 
-    p_ecg_denoise = subparsers.add_parser("ecg_denoiser", help="Train ECG denoiser models.")
-    p_ecg_denoise.add_argument("--data_dir", type=str, required=True)
-    p_ecg_denoise.add_argument("--noise_dir", type=str, required=True)
-    p_ecg_denoise.add_argument("--save_path", type=str, required=True)
-    p_ecg_denoise.add_argument("--epochs", type=int, default=10)
-    p_ecg_denoise.add_argument('--no-gradient-loss', dest='use_gradient_loss', action='store_false')
-    p_ecg_denoise.add_argument('--no-fft-loss', dest='use_fft_loss', action='store_false')
-    p_ecg_denoise.set_defaults(use_gradient_loss=True, use_fft_loss=True)
+    parser.add_argument(
+        "--config",
+        type=str,
+        required=True,
+        help=""
+    )
 
-    p_ecg_class = subparsers.add_parser("ecg_classifier", help="Train the ECG beat classifier.")
-    p_ecg_class.add_argument("--data_dir", type=str, required=True)
-    p_ecg_class.add_argument("--save_path", type=str, required=True)
-    p_ecg_class.add_argument("--epochs", type=int, default=5)
-
-    p_eeg = subparsers.add_parser("eeg", help="Train EEG models.")
-    p_eeg.add_argument("--eeg_experiment_type", type=str, required=True,
-                       choices=['baseline', 'spatial', 'frequency', 'self_supervised'])
-    p_eeg.add_argument("--data_dir", type=str, required=True)
-    p_eeg.add_argument("--save_path", type=str, required=True)
-    p_eeg.add_argument("--epochs", type=int, default=10)
-    p_eeg.add_argument('--alpha', type=float, default=1.0)
-    p_eeg.add_argument('--beta', type=float, default=1.0)
-    
     args = parser.parse_args()
 
-    if args.experiment == "ecg_denoiser":
-        train_ecg_denoiser(args)
-    elif args.experiment == "ecg_classifier":
-        train_ecg_classifier(args)
-    elif args.experiment == "eeg":
-        train_eeg_model(args)
+    with open(args.config, 'r') as f:
+        config = yaml.safe_load(f)
+
+    
+    experiment = config.get('experiment_name', '')
+
+    if "ecg_denoiser" in experiment:
+        train_ecg_denoiser(config)
+    elif "ecg_classifier" in experiment:
+        print()
+    elif "eeg" in experiment:
+        print()
+    else:
+        print("Unknown expirment name")
