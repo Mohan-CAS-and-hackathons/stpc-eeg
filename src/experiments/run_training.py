@@ -42,11 +42,11 @@ def train_ecg_denoiser(config: dict):
 
 
     print("--- Training ECG Denoiser ---")
-    print(f"Config: Gradient Loss={config['experiment_name']}, Gradient Loss={config['use_gradient_loss']}, FFT Loss={config["use_fft_loss"]}")
-    os.makedirs(os.path.dirname(args.save_path), exist_ok=True)
+    print(f"Config: Gradient Loss={config['experiment_name']}, Gradient Loss={run_params['use_gradient_loss']}, FFT Loss={config["use_fft_loss"]}")
+    os.makedirs(os.path.dirname(paths["save_path"]), exist_ok=True)
 
     class ECGConfig:
-        LEARNING_RATE, BATCH_SIZE, NUM_EPOCHS = 1e-4, 32, args.epochs
+        LEARNING_RATE, BATCH_SIZE, NUM_EPOCHS = 1e-4, 32, train_params["epochs"]
         SEGMENT_LENGTH_SAMPLES, SNR_DB_MIN, SNR_DB_MAX = 2048, -3, 12
         W_RECON, W_GRAD, W_FFT = 1.0, 0.5, 0.3
 
