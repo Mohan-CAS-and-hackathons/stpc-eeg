@@ -1,0 +1,26 @@
+experiment_name: "ecg_denoiser_l1_only"
+
+run_params:
+  use_gradient_loss: False
+  use_fft_loss: False
+
+training_params:
+  learning_rate: 0.0001
+  batch_size: 32
+  epochs: 5
+  segment_samples: 2048
+  snr_db_min: -3
+  snr_db_max: 12
+
+
+loss_weights:
+  reconstruction: 1.0
+  gradient: 0.5
+  fft: 0.3
+
+
+paths:
+  data_dir: "/content/drive/MyDrive/stpc-eeg/data/mit-bih-arrhythmia-database-1.0.0"
+  noise_dir: "/content/drive/MyDrive/stpc-eeg/data/mit-bih-noise-stress-test-database-1.0.0"
+  save_path: "/content/drive/MyDrive/stpc-eeg/models/denoiser_l1_only_from_confid.pth"
+

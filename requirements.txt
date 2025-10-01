@@ -30,3 +30,5 @@ umap-learn
 scikit-image
 
 moviepy
+
+pyaml
