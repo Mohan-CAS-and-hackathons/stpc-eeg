@@ -26,7 +26,7 @@ We'd love to hear your ideas! Please open an issue with the "enhancement" or "re
 We follow a standard Fork & Pull Request workflow.
 
 1.  **Fork the repository** to your own GitHub account.
-2.  **Clone your fork** to your local machine: `git clone https://github.com/YourUsername/ecg-denoiser-hackathon.git`
+2.  **Clone your fork** to your local machine: `git clone https://github.com/Mohan-CAS-and-hackathons/stpc-eeg.git`
 3.  **Set up your development environment:**
     ```bash
     cd ecg-denoiser-hackathon

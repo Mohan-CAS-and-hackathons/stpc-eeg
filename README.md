@@ -48,8 +48,8 @@ This is the most powerful application. By training an STPC-regularized model on 
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/Mohan-CAS-and-hackathons/ecg-denoising-research.git
-cd ecg-denoising-research
+git clone hhttps://github.com/Mohan-CAS-and-hackathons/stpc-eeg.git
+cd stpc-eeg
 ```
 
 ### 2. Set Up the Environment
