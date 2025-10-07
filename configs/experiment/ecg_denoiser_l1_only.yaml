@@ -1,0 +1,27 @@
+# @package _global_
+# This file defines the L1-Only experiment
+
+experiment_name: "ecg_denoiser_l1_only"
+
+# --- Parameters specific to this run ---
+run_params:
+  use_gradient_loss: False
+  use_fft_loss: False
+
+# --- Common training parameters ---
+training_params:
+  learning_rate: 0.0001
+  batch_size: 32
+  epochs: 5 # Can be overridden from the command line
+
+# --- Loss weights (even if unused, it's good practice to define them) ---
+loss_weights:
+  reconstruction: 1.0
+  gradient: 0.0 # Explicitly zero
+  fft: 0.0      # Explicitly zero
+
+# --- Paths to data and save locations ---
+paths:
+  data_dir: "data/mit-bih-arrhythmia-database-1.0.0/"
+  noise_dir: "data/mit-bih-noise-stress-test-database-1.0.0/"
+  save_path: "models/denoiser_l1_only_hydra.pth"

@@ -29,4 +29,6 @@ umap-learn
 
 scikit-image
 
-moviepy
+moviepyhydra-core
+omegaconf
+tqdm

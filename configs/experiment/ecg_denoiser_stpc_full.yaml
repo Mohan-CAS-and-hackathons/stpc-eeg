@@ -1,0 +1,23 @@
+# @package _global_
+# This file defines the Full STPC experiment
+
+experiment_name: "ecg_denoiser_stpc_full"
+
+run_params:
+  use_gradient_loss: True
+  use_fft_loss: True
+
+training_params:
+  learning_rate: 0.0001
+  batch_size: 32
+  epochs: 5
+
+loss_weights:
+  reconstruction: 1.0
+  gradient: 0.5
+  fft: 0.3
+
+paths:
+  data_dir: "data/mit-bih-arrhythmia-database-1.0.0/"
+  noise_dir: "data/mit-bih-noise-stress-test-database-1.0.0/"
+  save_path: "models/denoiser_stpc_full_hydra.pth"

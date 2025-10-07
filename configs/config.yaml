@@ -1,0 +1,9 @@
+# configs/config.yaml
+defaults:
+  - experiment: ecg_denoiser_stpc_full
+
+# You can add other top-level settings here if needed,
+# like paths that are common to ALL experiments.
+# For now, we'll keep it simple.
+
+work_dir: ${hydra:runtime.cwd}
